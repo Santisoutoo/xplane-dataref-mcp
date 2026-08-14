@@ -1,0 +1,44 @@
+# A simulator never runs here. Every test speaks to canned HTTP responses;
+# do not add a job that tries to install X-Plane.
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  lint-py:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      # setup-uv's python-version input creates AND activates a project venv,
+      # so the install below targets it — never the runner's system
+      # interpreter. Do not add an explicit `uv venv`: it fails on the venv
+      # setup-uv already made.
+      - run: uv pip install -e ".[dev]"
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy .
+
+  test-py:
+    strategy:
+      fail-fast: false
+      matrix:
+        # windows-latest is not ceremony: the console-script shim and the stdio
+        # transport are what a user actually launches, and X-Plane users launch
+        # them on Windows.
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.12", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "${{ matrix.python }}"
+      - run: uv pip install -e ".[dev]"
+      - run: uv run pytest

@@ -1,0 +1,77 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xplane-dataref-mcp"
+version = "0.1.0"
+description = "MCP server exposing X-Plane's datarefs and commands to LLM clients over the Web API"
+requires-python = ">=3.12"
+dependencies = [
+    # The official SDK, upper-bounded at the major. 2.0 renamed the ergonomic
+    # server class (`FastMCP` -> `MCPServer`, under `mcp.server.mcpserver`) and
+    # moved `ToolError` with it, so an unbounded floor is how a working install
+    # becomes an ImportError on a machine that resolved a day later.
+    "mcp>=2.0,<3",
+    # The transport to X-Plane's Web API. Upper-bounded at the major: 1.0 is
+    # announced to remove deprecated shims this repo may be standing on.
+    "httpx>=0.28,<1",
+    # Imported directly for the tool result models; arrives with `mcp` anyway.
+    "pydantic>=2.9,<3",
+]
+
+[project.optional-dependencies]
+# Pinned to minor ranges: a linter or test-runner major redefines "correct"
+# between releases and turns a passing commit red without a line of ours
+# changing.
+dev = [
+    "pytest>=9.1.1,<9.2",
+    "pytest-asyncio>=1.4,<1.5",
+    "ruff>=0.16.1,<0.17",
+    "mypy>=2.3,<2.4",
+]
+
+[project.scripts]
+xplane-dataref-mcp = "xplane_dataref_mcp.__main__:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+packages = ["xplane_dataref_mcp"]
+
+# ---------------------------------------------------------------------------
+# Lint / format
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = [".venv", "build", "dist"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF", "ANN", "PTH"]
+ignore = ["ANN401"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ANN"]
+
+# ---------------------------------------------------------------------------
+# Types
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+exclude = ["build/", "dist/"]
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+# The default run excludes what needs anything beyond this repo: a running
+# X-Plane. An explicit command-line -m wins over addopts, so `pytest -m sim`
+# remains the escape hatch.
+addopts = ["-m", "not sim", "--strict-markers"]
+markers = [
+    "sim: requires a running X-Plane with the Web API enabled at XPLANE_URL. Excluded by default.",
+]
