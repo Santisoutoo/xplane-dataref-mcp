@@ -24,6 +24,10 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy .
+      # Metadata breakage (unrenderable readme, bad licence) should fail the
+      # push that introduces it, not the release that trips over it.
+      - run: uv build
+      - run: uvx twine check dist/*
 
   test-py:
     strategy:
