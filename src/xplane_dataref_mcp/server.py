@@ -14,6 +14,7 @@ from contextlib import asynccontextmanager
 
 from mcp.server.mcpserver import MCPServer
 
+from xplane_dataref_mcp import __version__
 from xplane_dataref_mcp.client import get_client, release_lazy_client
 from xplane_dataref_mcp.tools import register_all
 
@@ -70,7 +71,7 @@ def build_server() -> MCPServer[None]:
         name="xplane-dataref-mcp",
         title="X-Plane datarefs and commands",
         instructions=INSTRUCTIONS,
-        version="0.1.0",
+        version=__version__,
         lifespan=_lifespan,
     )
     register_all(server)

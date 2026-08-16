@@ -4,7 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xplane-dataref-mcp"
-version = "0.1.0"
+# The version lives in src/xplane_dataref_mcp/__init__.py and nowhere else.
+dynamic = ["version"]
 description = "MCP server exposing X-Plane's datarefs and commands to LLM clients over the Web API"
 requires-python = ">=3.12"
 dependencies = [
@@ -37,6 +38,9 @@ xplane-dataref-mcp = "xplane_dataref_mcp.__main__:main"
 [tool.setuptools]
 package-dir = { "" = "src" }
 packages = ["xplane_dataref_mcp"]
+
+[tool.setuptools.dynamic]
+version = { attr = "xplane_dataref_mcp.__version__" }
 
 # ---------------------------------------------------------------------------
 # Lint / format

@@ -13,6 +13,7 @@ error type added tomorrow is still caught.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -173,6 +174,30 @@ async def _resolve_dataref(name: str) -> CatalogueEntry:
     return entry
 
 
+async def _read_one(name: str, index: int | None = None) -> DatarefValue:
+    """Resolve, read, and decode one dataref, surviving a stale id.
+
+    A 404 on a known id means the id went stale — X-Plane was restarted
+    since the catalogue was cached. Refresh and retry once; a second
+    failure is real. Both read tools go through here so they share that
+    retry.
+    """
+    entry = await _resolve_dataref(name)
+    client = get_client()
+    try:
+        raw = await client.dataref_value(entry, index)
+    except XPlaneResponseError as exc:
+        if exc.status_code != 404:
+            raise
+        entry = (await client.datarefs(refresh=True))[name]
+        raw = await client.dataref_value(entry, index)
+    return DatarefValue(
+        name=name,
+        value=decode_value(raw, entry.value_type),
+        value_type=entry.value_type,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
@@ -230,23 +255,7 @@ def register_all(server: MCPServer[None]) -> None:
         the right one with ``search_datarefs``.
         """
         with _tool_errors():
-            entry = await _resolve_dataref(name)
-            client = get_client()
-            try:
-                raw = await client.dataref_value(entry, index)
-            except XPlaneResponseError as exc:
-                if exc.status_code != 404:
-                    raise
-                # A 404 on a known id means the id went stale — X-Plane was
-                # restarted since the catalogue was cached. Refresh and retry
-                # once; a second failure is real.
-                entry = (await client.datarefs(refresh=True))[name]
-                raw = await client.dataref_value(entry, index)
-        return DatarefValue(
-            name=name,
-            value=decode_value(raw, entry.value_type),
-            value_type=entry.value_type,
-        )
+            return await _read_one(name, index)
 
     @server.tool()
     async def read_datarefs(names: list[str]) -> list[DatarefValue]:
@@ -256,20 +265,9 @@ def register_all(server: MCPServer[None]) -> None:
         picture (say, the whole autopilot state) so the values are close in
         time. Each name must be exact.
         """
-        results: list[DatarefValue] = []
         with _tool_errors():
-            client = get_client()
-            for name in names:
-                entry = await _resolve_dataref(name)
-                raw = await client.dataref_value(entry)
-                results.append(
-                    DatarefValue(
-                        name=name,
-                        value=decode_value(raw, entry.value_type),
-                        value_type=entry.value_type,
-                    )
-                )
-        return results
+            # Concurrent reads are what makes the result an actual snapshot.
+            return list(await asyncio.gather(*(_read_one(name) for name in names)))
 
     @server.tool()
     async def search_commands(query: str, limit: int = 30) -> CommandSearchResult:
