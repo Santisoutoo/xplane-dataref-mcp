@@ -1,5 +1,6 @@
 [build-system]
-requires = ["setuptools>=68"]
+# >=77 for PEP 639: `license` as an SPDX expression plus `license-files`.
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,6 +8,29 @@ name = "xplane-dataref-mcp"
 # The version lives in src/xplane_dataref_mcp/__init__.py and nowhere else.
 dynamic = ["version"]
 description = "MCP server exposing X-Plane's datarefs and commands to LLM clients over the Web API"
+readme = "README.md"
+# PEP 639 SPDX expression — deliberately no `License ::` classifier alongside.
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Santiago Souto" }]
+keywords = [
+    "mcp",
+    "model-context-protocol",
+    "x-plane",
+    "xplane",
+    "flight-simulator",
+    "dataref",
+    "llm",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Games/Entertainment :: Simulation",
+    "Typing :: Typed",
+]
 requires-python = ">=3.12"
 dependencies = [
     # The official SDK, upper-bounded at the major. 2.0 renamed the ergonomic
@@ -32,6 +56,11 @@ dev = [
     "mypy>=2.3,<2.4",
 ]
 
+[project.urls]
+Repository = "https://github.com/Santisoutoo/xplane-dataref-mcp"
+Issues = "https://github.com/Santisoutoo/xplane-dataref-mcp/issues"
+Changelog = "https://github.com/Santisoutoo/xplane-dataref-mcp/blob/main/CHANGELOG.md"
+
 [project.scripts]
 xplane-dataref-mcp = "xplane_dataref_mcp.__main__:main"
 
@@ -41,6 +70,10 @@ packages = ["xplane_dataref_mcp"]
 
 [tool.setuptools.dynamic]
 version = { attr = "xplane_dataref_mcp.__version__" }
+
+[tool.setuptools.package-data]
+# The marker that lets importers' type checkers see this package's types.
+xplane_dataref_mcp = ["py.typed"]
 
 # ---------------------------------------------------------------------------
 # Lint / format
