@@ -1,12 +1,15 @@
 # xplane-dataref-mcp
 
+[![CI](https://github.com/Santisoutoo/xplane-dataref-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/Santisoutoo/xplane-dataref-mcp/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/xplane-dataref-mcp)](https://pypi.org/project/xplane-dataref-mcp/)
+
 An [MCP](https://modelcontextprotocol.io) server that gives an LLM client raw access to a running
 X-Plane 12: search its ~10,000 datarefs and ~3,000 commands by substring, read any dataref's
 current value, and fire commands — over X-Plane's own Web API. No plugin, no UDP, no third
 process.
 
 ```
-you ──▶ Claude ──▶ xplane-dataref-mcp ──HTTP──▶ X-Plane 12 Web API
+you ──▶ any MCP client ──▶ xplane-dataref-mcp ──HTTP──▶ X-Plane 12 Web API
 ```
 
 This is the low-level sibling of [xplane-mcp](https://github.com/Santisoutoo/xplane-mcp), which
@@ -24,7 +27,7 @@ only filters by exact name. The server downloads the catalogue once and searches
 | `get_connection_status` | Is X-Plane reachable, and what does its API offer? Reported as data, not as an error. |
 | `search_datarefs` | Substring search (AND of terms, case-insensitive) over every dataref name. |
 | `read_dataref` | One dataref's current value, by exact name; `index` picks an array element. |
-| `read_datarefs` | Several at once — one snapshot of related state. |
+| `read_datarefs` | Several at once, read concurrently — one snapshot of related state. |
 | `search_commands` | The same search over command names and descriptions. |
 | `execute_command` | Press a command, or hold it for up to 10 s. |
 
@@ -50,23 +53,141 @@ a caller asks without failing.
 
 ## Install
 
+With [uv](https://docs.astral.sh/uv/) there is nothing to install ahead of time — every client
+config below just runs `uvx xplane-dataref-mcp`, which fetches it from PyPI on first use. For a
+persistent install:
+
 ```bash
-uv tool install --from git+https://github.com/Santisoutoo/xplane-dataref-mcp xplane-dataref-mcp
-claude mcp add xplane-datarefs -- xplane-dataref-mcp
+uv tool install xplane-dataref-mcp    # or: pip install xplane-dataref-mcp
 ```
 
-Or, without installing anything, as a project-scoped `.mcp.json`:
+From source: `uvx --from git+https://github.com/Santisoutoo/xplane-dataref-mcp xplane-dataref-mcp`.
+
+## Use with your client
+
+Every stdio config is the same idea — `command: uvx`, `args: ["xplane-dataref-mcp"]` — dressed
+in each client's file format. If X-Plane is not at the default `http://127.0.0.1:8086`, add
+`XPLANE_URL` via the config's `env` field (shown once, in the Claude Code example).
+
+### Claude Code
+
+```bash
+claude mcp add xplane-datarefs -- uvx xplane-dataref-mcp
+```
+
+Or as a project-scoped `.mcp.json`:
 
 ```json
 {
   "mcpServers": {
     "xplane-datarefs": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/Santisoutoo/xplane-dataref-mcp", "xplane-dataref-mcp"]
+      "args": ["xplane-dataref-mcp"],
+      "env": { "XPLANE_URL": "http://127.0.0.1:8086" }
     }
   }
 }
 ```
+
+### Claude Desktop
+
+Settings → Developer → Edit Config, then in `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "xplane-datarefs": { "command": "uvx", "args": ["xplane-dataref-mcp"] }
+  }
+}
+```
+
+### Cursor
+
+`~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (per project):
+
+```json
+{
+  "mcpServers": {
+    "xplane-datarefs": { "command": "uvx", "args": ["xplane-dataref-mcp"] }
+  }
+}
+```
+
+### VS Code (GitHub Copilot)
+
+`.vscode/mcp.json` — note the different shape (`servers`, and a `type`):
+
+```json
+{
+  "servers": {
+    "xplane-datarefs": { "type": "stdio", "command": "uvx", "args": ["xplane-dataref-mcp"] }
+  }
+}
+```
+
+### Codex CLI
+
+`~/.codex/config.toml`:
+
+```toml
+[mcp_servers.xplane-datarefs]
+command = "uvx"
+args = ["xplane-dataref-mcp"]
+```
+
+### Gemini CLI
+
+`~/.gemini/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "xplane-datarefs": { "command": "uvx", "args": ["xplane-dataref-mcp"] }
+  }
+}
+```
+
+### LM Studio
+
+Program → Install → Edit `mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "xplane-datarefs": { "command": "uvx", "args": ["xplane-dataref-mcp"] }
+  }
+}
+```
+
+## HTTP for programmatic agents
+
+Agents built in code — rather than launched by a desktop client — connect over streamable HTTP
+instead of stdio:
+
+```bash
+xplane-dataref-mcp --transport streamable-http --host 127.0.0.1 --port 8000
+```
+
+The MCP endpoint is `http://127.0.0.1:8000/mcp`. With the MCP Python SDK:
+
+```python
+from mcp import Client
+
+async with Client("http://127.0.0.1:8000/mcp") as client:
+    tools = await client.list_tools()
+```
+
+With the OpenAI Agents SDK:
+
+```python
+from agents.mcp import MCPServerStreamableHttp
+
+xplane = MCPServerStreamableHttp(params={"url": "http://127.0.0.1:8000/mcp"})
+```
+
+**Security**: the server has no authentication. On `127.0.0.1` the SDK's Host/Origin validation
+(DNS-rebinding protection) is enabled automatically; binding `0.0.0.0` disables it and hands
+control of your simulator to anyone who can reach the port. Trusted networks only.
 
 ## Configuration
 
@@ -94,9 +215,10 @@ ruff check . && ruff format --check . && mypy .
 ```
 
 The default suite fakes X-Plane at the HTTP boundary with canned responses — the catalogue
-download, the search, the base64 decode and the stale-id retry are all exercised without a
-simulator. The `sim` marker is reserved for tests that need the real thing.
+download, the search, the base64 decode, the stale-id retry, and the streamable-http transport
+itself are all exercised without a simulator. The `sim` marker is reserved for tests that need
+the real thing.
 
 ## Licence
 
-Not chosen yet. Until then, all rights reserved.
+[MIT](LICENSE).
