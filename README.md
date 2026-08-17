@@ -1,7 +1,7 @@
 # xplane-dataref-mcp
 
 [![CI](https://github.com/Santisoutoo/xplane-dataref-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/Santisoutoo/xplane-dataref-mcp/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/xplane-dataref-mcp)](https://pypi.org/project/xplane-dataref-mcp/)
+[![PyPI](https://img.shields.io/pypi/v/xplane-dataref-mcp?logo=pypi&logoColor=white)](https://pypi.org/project/xplane-dataref-mcp/)
 
 An [MCP](https://modelcontextprotocol.io) server that gives any LLM client raw access to a
 running X-Plane 12: search its ~10,000 datarefs and ~3,000 commands by substring, read values,
