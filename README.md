@@ -3,24 +3,23 @@
 [![CI](https://github.com/Santisoutoo/xplane-dataref-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/Santisoutoo/xplane-dataref-mcp/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/xplane-dataref-mcp)](https://pypi.org/project/xplane-dataref-mcp/)
 
-An [MCP](https://modelcontextprotocol.io) server that gives an LLM client raw access to a running
-X-Plane 12: search its ~10,000 datarefs and ~3,000 commands by substring, read any dataref's
-current value, and fire commands — over X-Plane's own Web API. No plugin, no UDP, no third
-process.
+An [MCP](https://modelcontextprotocol.io) server that gives any LLM client raw access to a
+running X-Plane 12: search its ~10,000 datarefs and ~3,000 commands by substring, read values,
+and fire commands — over X-Plane's own Web API. It exists mostly for the lookup problem: nobody
+knows the string `sim/cockpit2/gauges/indicators/airspeed_kts_pilot` before finding it, and the
+Web API itself only filters by exact name. For instructor-level operations ("place me on a
+10 NM final") see its high-level sibling, [xplane-mcp](https://github.com/Santisoutoo/xplane-mcp).
 
+```mermaid
+flowchart LR
+    client["Any MCP client<br/>Claude · Cursor · GPT · local models"]
+    server["xplane-dataref-mcp<br/>6 tools · cached catalogue"]
+    xplane["X-Plane 12 Web API<br/>12.1.4+"]
+    client -- "stdio / streamable-http" --> server
+    server -- "REST" --> xplane
 ```
-you ──▶ any MCP client ──▶ xplane-dataref-mcp ──HTTP──▶ X-Plane 12 Web API
-```
 
-This is the low-level sibling of [xplane-mcp](https://github.com/Santisoutoo/xplane-mcp), which
-speaks instructor-level operations ("place me on a 10 NM final") through the Open Instructor
-Station. This server speaks X-Plane's own vocabulary instead, and its reason to exist is mostly
-the lookup problem: nobody knows the string
-`sim/cockpit2/gauges/indicators/airspeed_kts_pilot` before finding it, and the Web API itself
-only filters by exact name. The server downloads the catalogue once and searches it locally, so
-"what's my airspeed?" becomes a search, a read, and an answer.
-
-## What it can do
+## Tools
 
 | Tool | |
 |---|---|
@@ -31,37 +30,46 @@ only filters by exact name. The server downloads the catalogue once and searches
 | `search_commands` | The same search over command names and descriptions. |
 | `execute_command` | Press a command, or hold it for up to 10 s. |
 
-Byte-array (`data`) datarefs are decoded from base64 to text when they are text — a tail number
-reads as `EC-ABC`, not `RUMtQUJD…`. Dataref ids go stale when X-Plane restarts mid-session;
-the server notices the 404, refreshes its catalogue and retries, invisibly.
+Byte-array (`data`) datarefs are decoded from base64 to text when they are text. Writing
+datarefs is deliberately absent — commands cover acting on the simulator with X-Plane's own
+semantics and bounds.
 
-Deliberately absent: writing datarefs. Commands cover the "act on the simulator" cases with
-X-Plane's own semantics and bounds; raw dataref writes are a different risk class, and
-instructor-style state changes already have a home in
-[xplane-mcp](https://github.com/Santisoutoo/xplane-mcp).
+## How it works
 
-## X-Plane setup
+```mermaid
+sequenceDiagram
+    participant LLM as LLM client
+    participant S as xplane-dataref-mcp
+    participant XP as X-Plane 12
 
-Needs X-Plane **12.1.4 or newer** (the `/api/v2` API — commands arrived there). Enable the Web
-API in Settings → Network → *Accept incoming connections*. X-Plane then serves on port 8086
-(`--web_server_port=NNNN` to change it).
-
-The server itself starts fine with the simulator down: every tool call is its own HTTP request,
-so the moment X-Plane comes up the tools work, with no restart. While it is down, tools fail
-with a sentence saying where they looked and how to fix it, and `get_connection_status` is how
-a caller asks without failing.
-
-## Install
-
-With [uv](https://docs.astral.sh/uv/) there is nothing to install ahead of time — every client
-config below just runs `uvx xplane-dataref-mcp`, which fetches it from PyPI on first use. For a
-persistent install:
-
-```bash
-uv tool install xplane-dataref-mcp    # or: pip install xplane-dataref-mcp
+    LLM->>S: search_datarefs("airspeed pilot")
+    Note over S: local substring search<br/>over the cached catalogue
+    S-->>LLM: …/airspeed_kts_pilot
+    LLM->>S: read_dataref(name)
+    S->>XP: GET /api/v2/datarefs/{id}/value
+    XP-->>S: 123.5
+    S-->>LLM: 123.5 (float)
+    Note over S,XP: Dataref ids go stale when X-Plane restarts:<br/>the 404 triggers a catalogue refresh and one retry — invisibly.
 ```
 
-From source: `uvx --from git+https://github.com/Santisoutoo/xplane-dataref-mcp xplane-dataref-mcp`.
+## Quick start
+
+1. X-Plane **12.1.4+**, Settings → Network → *Accept incoming connections* (serves on port 8086).
+2. `claude mcp add xplane-datarefs -- uvx xplane-dataref-mcp` — or open your client below.
+3. Ask: *"what's my airspeed?"*
+
+The server starts fine with the simulator down — the moment X-Plane comes up, the tools work,
+no restart needed.
+
+<details>
+<summary>Persistent install / from source</summary>
+
+```bash
+uv tool install xplane-dataref-mcp      # or: pip install xplane-dataref-mcp
+uvx --from git+https://github.com/Santisoutoo/xplane-dataref-mcp xplane-dataref-mcp   # from source
+```
+
+</details>
 
 ## Use with your client
 
@@ -69,7 +77,8 @@ Every stdio config is the same idea — `command: uvx`, `args: ["xplane-dataref-
 in each client's file format. If X-Plane is not at the default `http://127.0.0.1:8086`, add
 `XPLANE_URL` via the config's `env` field (shown once, in the Claude Code example).
 
-### Claude Code
+<details open>
+<summary><b>Claude Code</b></summary>
 
 ```bash
 claude mcp add xplane-datarefs -- uvx xplane-dataref-mcp
@@ -89,7 +98,10 @@ Or as a project-scoped `.mcp.json`:
 }
 ```
 
-### Claude Desktop
+</details>
+
+<details>
+<summary><b>Claude Desktop</b></summary>
 
 Settings → Developer → Edit Config, then in `claude_desktop_config.json`:
 
@@ -101,7 +113,10 @@ Settings → Developer → Edit Config, then in `claude_desktop_config.json`:
 }
 ```
 
-### Cursor
+</details>
+
+<details>
+<summary><b>Cursor</b></summary>
 
 `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (per project):
 
@@ -113,7 +128,10 @@ Settings → Developer → Edit Config, then in `claude_desktop_config.json`:
 }
 ```
 
-### VS Code (GitHub Copilot)
+</details>
+
+<details>
+<summary><b>VS Code (GitHub Copilot)</b></summary>
 
 `.vscode/mcp.json` — note the different shape (`servers`, and a `type`):
 
@@ -125,7 +143,10 @@ Settings → Developer → Edit Config, then in `claude_desktop_config.json`:
 }
 ```
 
-### Codex CLI
+</details>
+
+<details>
+<summary><b>Codex CLI</b></summary>
 
 `~/.codex/config.toml`:
 
@@ -135,7 +156,10 @@ command = "uvx"
 args = ["xplane-dataref-mcp"]
 ```
 
-### Gemini CLI
+</details>
+
+<details>
+<summary><b>Gemini CLI</b></summary>
 
 `~/.gemini/settings.json`:
 
@@ -147,7 +171,10 @@ args = ["xplane-dataref-mcp"]
 }
 ```
 
-### LM Studio
+</details>
+
+<details>
+<summary><b>LM Studio</b></summary>
 
 Program → Install → Edit `mcp.json`:
 
@@ -159,16 +186,26 @@ Program → Install → Edit `mcp.json`:
 }
 ```
 
+</details>
+
 ## HTTP for programmatic agents
 
-Agents built in code — rather than launched by a desktop client — connect over streamable HTTP
-instead of stdio:
+Agents built in code connect over streamable HTTP instead of stdio:
 
 ```bash
 xplane-dataref-mcp --transport streamable-http --host 127.0.0.1 --port 8000
 ```
 
-The MCP endpoint is `http://127.0.0.1:8000/mcp`. With the MCP Python SDK:
+The MCP endpoint is `http://127.0.0.1:8000/mcp`.
+
+**Security**: the server has no authentication. On `127.0.0.1` the SDK's Host/Origin validation
+(DNS-rebinding protection) is enabled automatically; binding `0.0.0.0` disables it and hands
+control of your simulator to anyone who can reach the port. Trusted networks only.
+
+<details>
+<summary>Connection examples (MCP Python SDK, OpenAI Agents SDK)</summary>
+
+With the MCP Python SDK:
 
 ```python
 from mcp import Client
@@ -185,9 +222,7 @@ from agents.mcp import MCPServerStreamableHttp
 xplane = MCPServerStreamableHttp(params={"url": "http://127.0.0.1:8000/mcp"})
 ```
 
-**Security**: the server has no authentication. On `127.0.0.1` the SDK's Host/Origin validation
-(DNS-rebinding protection) is enabled automatically; binding `0.0.0.0` disables it and hands
-control of your simulator to anyone who can reach the port. Trusted networks only.
+</details>
 
 ## Configuration
 
@@ -204,20 +239,15 @@ trust.
 
 ```bash
 git clone https://github.com/Santisoutoo/xplane-dataref-mcp && cd xplane-dataref-mcp
-uv venv
-uv pip install -e ".[dev]"
-```
+uv venv && uv pip install -e ".[dev]"
 
-```bash
 pytest                       # offline: every test runs against a canned Web API
 pytest -m sim                # against a real X-Plane at XPLANE_URL
 ruff check . && ruff format --check . && mypy .
 ```
 
-The default suite fakes X-Plane at the HTTP boundary with canned responses — the catalogue
-download, the search, the base64 decode, the stale-id retry, and the streamable-http transport
-itself are all exercised without a simulator. The `sim` marker is reserved for tests that need
-the real thing.
+The default suite fakes X-Plane at the HTTP boundary, so everything — including the
+streamable-http transport — is exercised without a simulator.
 
 ## Licence
 
