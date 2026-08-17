@@ -49,7 +49,7 @@ sequenceDiagram
     S->>XP: GET /api/v2/datarefs/{id}/value
     XP-->>S: 123.5
     S-->>LLM: 123.5 (float)
-    Note over S,XP: Dataref ids go stale when X-Plane restarts:<br/>the 404 triggers a catalogue refresh and one retry — invisibly.
+    Note over S,XP: Ids go stale when X-Plane restarts —<br/>a 404 refreshes the catalogue, one retry.
 ```
 
 ## Quick start
